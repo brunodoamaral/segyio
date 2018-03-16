@@ -1,4 +1,5 @@
 #include <float.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,6 +22,83 @@ static void printSegyTraceInfo( const char* buf ) {
 
 #define minimum(x,y) ((x) < (y) ? (x) : (y))
 #define maximum(x,y) ((x) > (y) ? (x) : (y))
+
+typedef union {
+    int32_t i32val;
+    int16_t i16val;
+    int8_t i8val;
+    float fval;
+} MutableTraceType ;
+
+int compare_assign_max(MutableTraceType* val, void* trace, int format) {
+    switch( format ) {
+        case SEGY_IBM_FLOAT_4_BYTE:
+        case SEGY_IEEE_FLOAT_4_BYTE:
+            if (val->fval < *((float*)trace)) {
+                val->fval = *((float*)trace) ;
+                return 1 ;
+            }
+            break;
+            
+        case SEGY_SIGNED_INTEGER_4_BYTE:
+            if (val->i32val < *((int32_t*)trace)) {
+                val->i32val = *((int32_t*)trace) ;
+                return 1 ;
+            }
+            break;
+            
+        case SEGY_SIGNED_SHORT_2_BYTE:
+            if (val->i16val < *((int16_t*)trace)) {
+                val->i16val = *((int16_t*)trace) ;
+                return 1 ;
+            }
+            break;
+            
+        case SEGY_SIGNED_CHAR_1_BYTE:
+            if (val->i8val < *((int8_t*)trace)) {
+                val->i8val = *((int8_t*)trace) ;
+                return 1 ;
+            }
+    }
+    
+    return 0 ;
+}
+
+bool compare_assign_min(MutableTraceType* val, void* trace, int format) {
+    switch( format ) {
+        case SEGY_IBM_FLOAT_4_BYTE:
+        case SEGY_IEEE_FLOAT_4_BYTE:
+            if (val->fval > *((float*)trace)) {
+                val->fval = *((float*)trace) ;
+                return true ;
+            }
+            break;
+            
+        case SEGY_SIGNED_INTEGER_4_BYTE:
+            if (val->i32val > *((int32_t*)trace)) {
+                val->i32val = *((int32_t*)trace) ;
+                return true ;
+            }
+            break;
+            
+        case SEGY_SIGNED_SHORT_2_BYTE:
+            if (val->i16val > *((int16_t*)trace)) {
+                val->i16val = *((int16_t*)trace) ;
+                return true ;
+            }
+            break;
+            
+        case SEGY_SIGNED_CHAR_1_BYTE:
+            if (val->i8val > *((int8_t*)trace)) {
+                val->i8val = *((int8_t*)trace) ;
+                return true ;
+            }
+            break;
+    }
+    
+    return false ;
+}
+
 
 int main(int argc, char* argv[]) {
     
@@ -54,7 +132,8 @@ int main(int argc, char* argv[]) {
     const int format = segy_format( header );
     const int samples = segy_samples( header );
     const long trace0 = segy_trace0( header );
-    const int trace_bsize = segy_trace_bsize( samples );
+    const int nbytes_sample = segy_sample_nbytes( header ) ;
+    const int trace_bsize = nbytes_sample * samples ;
     int extended_headers;
     err = segy_get_bfield( header, SEGY_BIN_EXT_HEADERS, &extended_headers );
 
@@ -73,6 +152,7 @@ int main(int argc, char* argv[]) {
 
     printf( "Sample format: %d\n", format );
     printf( "Samples per trace: %d\n", samples );
+    printf( "Bytes per sample: %d\n", nbytes_sample );
     printf( "Traces: %d\n", traces );
     printf("Extended text header count: %d\n", extended_headers );
     puts("");
@@ -99,10 +179,51 @@ int main(int argc, char* argv[]) {
     printSegyTraceInfo( traceh );
 
     clock_t start = clock();
-    float* trbuf = malloc( sizeof( float ) * trace_bsize );
+    void* trbuf = malloc( trace_bsize );
 
-    float minval = FLT_MAX;
-    float maxval = FLT_MIN;
+    MutableTraceType minval;
+    MutableTraceType maxval;
+    int minval_trace = -1;
+    int maxval_trace = -1;
+    
+    switch( format ) {
+        case SEGY_IBM_FLOAT_4_BYTE:
+            printf("Sample type: SEGY_IBM_FLOAT_4_BYTE\n");
+            minval.fval = 1e20 ;
+            maxval.fval = -1e20 ;
+            break;
+            
+        case SEGY_SIGNED_INTEGER_4_BYTE:
+            printf("Sample type: SEGY_SIGNED_INTEGER_4_BYTE\n");
+            minval.i32val = INT32_MAX ;
+            maxval.i32val = INT32_MIN ;
+            break;
+            
+        case SEGY_SIGNED_SHORT_2_BYTE:
+            printf("Sample type: SEGY_SIGNED_SHORT_2_BYTE\n");
+            minval.i16val = 999 ;
+            maxval.i16val = -999 ;
+            break;
+            
+            
+        case SEGY_IEEE_FLOAT_4_BYTE:
+            printf("Sample type: SEGY_IEEE_FLOAT_4_BYTE\n");
+            minval.fval = FLT_MAX ;
+            maxval.fval = FLT_MIN ;
+            break;
+            
+        case SEGY_FIXED_POINT_WITH_GAIN_4_BYTE:
+        case SEGY_NOT_IN_USE_1:
+        case SEGY_NOT_IN_USE_2:
+            printf("Unsupported sample format: %d\n", format);
+            break;
+            
+        case SEGY_SIGNED_CHAR_1_BYTE:
+            printf("Sample type: SEGY_SIGNED_CHAR_1_BYT\n");
+            minval.i8val = INT8_MAX ;
+            maxval.i8val = INT8_MIN ;
+            break;
+    }
 
     int min_sample_count = 999999999;
     int max_sample_count = 0;
@@ -124,7 +245,7 @@ int main(int argc, char* argv[]) {
         min_sample_count = minimum( sample_count, min_sample_count );
         max_sample_count = maximum( sample_count, max_sample_count );
 
-        err = segy_readtrace( fp, i, trbuf, trace0, trace_bsize );
+        err = segy_readtrace( fp, i, trbuf, trace0, trace_bsize, nbytes_sample );
 
         if( err != 0 ) {
             fprintf( stderr, "Unable to read trace: %d\n", i );
@@ -134,8 +255,13 @@ int main(int argc, char* argv[]) {
         segy_to_native( format, samples, trbuf );
 
         for( int j = 0; j < samples; ++j ) {
-            minval = minimum( trbuf[ j ], minval );
-            maxval = maximum( trbuf[ j ], maxval );
+            if ( compare_assign_min(&minval, (char*)trbuf+j*nbytes_sample, format) ) {
+                minval_trace = i ;
+            }
+            
+            if (compare_assign_max(&maxval, (char*)trbuf+j*nbytes_sample, format) ) {
+                maxval_trace = i ;
+            }
         }
     }
 
@@ -155,8 +281,30 @@ int main(int argc, char* argv[]) {
     puts("");
     printf("Min sample count: %d\n", min_sample_count);
     printf("Max sample count: %d\n", max_sample_count);
-    printf("Min sample value: %f\n", minval );
-    printf("Max sample value: %f\n", maxval );
+    
+    switch( format ) {
+        case SEGY_IBM_FLOAT_4_BYTE:
+        case SEGY_IEEE_FLOAT_4_BYTE:
+            printf("Min sample value: %f at trace %d\n", minval.fval, minval_trace );
+            printf("Max sample value: %f at trace %d\n", maxval.fval, maxval_trace );
+            break;
+            
+        case SEGY_SIGNED_INTEGER_4_BYTE:
+            printf("Min sample value: %d at trace %d\n", minval.i32val, minval_trace );
+            printf("Max sample value: %d at trace %d\n", maxval.i32val, maxval_trace );
+            break;
+            
+        case SEGY_SIGNED_SHORT_2_BYTE:
+            printf("Min sample value: %d at trace %d\n", minval.i16val, minval_trace );
+            printf("Max sample value: %d at trace %d\n", maxval.i16val, maxval_trace );
+            break;
+            
+        case SEGY_SIGNED_CHAR_1_BYTE:
+            printf("Min sample value: %d at trace %d\n", minval.i8val, minval_trace );
+            printf("Max sample value: %d at trace %d\n", maxval.i8val, maxval_trace );
+            break;
+    }
+    
     puts("");
 
     clock_t diff = clock() - start;

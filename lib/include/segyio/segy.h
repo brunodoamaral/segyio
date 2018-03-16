@@ -75,6 +75,9 @@ int segy_field_forall( segy_file*,
  * fail.
  */
 int segy_trace_bsize( int samples );
+
+int segy_sample_nbytes( const char* binheader );
+    
 /* byte-offset of the first trace header. */
 long segy_trace0( const char* binheader );
 /*
@@ -158,15 +161,17 @@ int segy_offset_indices( segy_file*,
  */
 int segy_readtrace( segy_file*,
                     int traceno,
-                    float* buf,
+                    void* buf,
                     long trace0,
-                    int trace_bsize );
+                    int trace_bsize,
+                    int sample_bsize );
 
 int segy_writetrace( segy_file*,
                      int traceno,
-                     const float* buf,
+                     const void* buf,
                      long trace0,
-                     int trace_bsize );
+                     int trace_bsize,
+                     int sample_bsize );
 
 /*
  * read/write sub traces, with the same assumption and requirements as
@@ -196,20 +201,22 @@ int segy_readsubtr( segy_file*,
                     int start,
                     int stop,
                     int step,
-                    float* buf,
-                    float* rangebuf,
+                    void* buf,
+                    void* rangebuf,
                     long trace0,
-                    int trace_bsize );
+                    int trace_bsize,
+                    int sample_bsize );
 
 int segy_writesubtr( segy_file*,
                      int traceno,
                      int start,
                      int stop,
                      int step,
-                     const float* buf,
-                     float* rangebuf,
+                     const void* buf,
+                     void* rangebuf,
                      long trace0,
-                     int trace_bsize );
+                     int trace_bsize,
+                     int sample_bsize );
 
 /*
  * convert to/from native float from segy formats (likely IBM or IEEE).  Size
@@ -218,7 +225,7 @@ int segy_writesubtr( segy_file*,
  */
 int segy_to_native( int format,
                     long long size,
-                    float* buf );
+                    void* buf );
 
 int segy_from_native( int format,
                       long long size,
@@ -229,18 +236,20 @@ int segy_read_line( segy_file* fp,
                     int line_length,
                     int stride,
                     int offsets,
-                    float* buf,
+                    void* buf,
                     long trace0,
-                    int trace_bsize );
+                    int trace_bsize,
+                    int sample_bsize );
 
 int segy_write_line( segy_file* fp,
                     int line_trace0,
                     int line_length,
                     int stride,
                     int offsets,
-                    const float* buf,
+                    const void* buf,
                     long trace0,
-                    int trace_bsize );
+                    int trace_bsize,
+                    int sample_bsize );
 
 /*
  * Count inlines and crosslines. Use this function to determine how large buffer
