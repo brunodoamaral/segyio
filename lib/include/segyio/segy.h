@@ -74,7 +74,8 @@ int segy_field_forall( segy_file*,
  * exception: segy_trace_bsize computes the size of the traces in bytes. Cannot
  * fail.
  */
-int segy_trace_bsize( int samples );
+int segy_trace_bsize( int samples, int format );
+int segy_sample_nbytes_format( const int format );
 
 int segy_sample_nbytes( const char* binheader );
     
@@ -229,7 +230,7 @@ int segy_to_native( int format,
 
 int segy_from_native( int format,
                       long long size,
-                      float* buf );
+                      void* buf );
 
 int segy_read_line( segy_file* fp,
                     int line_trace0,

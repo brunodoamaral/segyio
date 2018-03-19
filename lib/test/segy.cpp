@@ -103,15 +103,17 @@ SCENARIO( MMAP_TAG "reading a file", "[c.segy]" MMAP_TAG ) {
         REQUIRE( Err( segy_binheader( fp, header ) ) == Err::ok() );
         int samples = segy_samples( header );
         long trace0 = segy_trace0( header );
-        int trace_bsize = segy_trace_bsize( samples );
+        int sample_bsize = segy_sample_nbytes( header );
+        int trace_bsize = segy_trace_bsize( samples, sample_bsize );
 
         CHECK( trace0      == 3600 );
         CHECK( samples     == 50 );
-        CHECK( trace_bsize == 50 * 4 );
+        CHECK( trace_bsize == 50 * sample_bsize );
     }
 
     const long trace0 = 3600;
-    const int trace_bsize = 50 * 4;
+    const int sample_bsize = 4;
+    const int trace_bsize = 50 * sample_bsize;
     const int samples = 50;
 
     WHEN( "determining number of traces" ) {
@@ -367,7 +369,7 @@ SCENARIO( MMAP_TAG "reading a file", "[c.segy]" MMAP_TAG ) {
                                           start, stop, step,
                                           buf.data(),
                                           nullptr,
-                                          trace0, trace_bsize );
+                                          trace0, trace_bsize, sample_bsize );
                 segy_to_native( format, buf.size(), buf.data() );
                 CHECK( err == Err::ok() );
                 CHECK_THAT( buf, ApproxRange( expect[ i ] ) );
@@ -402,7 +404,7 @@ SCENARIO( MMAP_TAG "reading a file", "[c.segy]" MMAP_TAG ) {
                                   stride,
                                   offsets,
                                   line.data(),
-                                  trace0, trace_bsize );
+                                  trace0, trace_bsize, sample_bsize );
             REQUIRE( err == Err::ok() );
             segy_to_native( format, line.size(), line.data() );
 
@@ -441,7 +443,7 @@ SCENARIO( MMAP_TAG "reading a file", "[c.segy]" MMAP_TAG ) {
                                   stride,
                                   offsets,
                                   line.data(),
-                                  trace0, trace_bsize );
+                                  trace0, trace_bsize, sample_bsize );
             REQUIRE( err == Err::ok() );
             segy_to_native( format, line.size(), line.data() );
 
@@ -461,7 +463,8 @@ SCENARIO( MMAP_TAG "reading a file", "[c.segy]" MMAP_TAG ) {
 
 SCENARIO( MMAP_TAG "writing to a file", "[c.segy]" MMAP_TAG ) {
     const long trace0 = 3600;
-    const int trace_bsize = 50 * 4;
+    const int sample_bsize = 4;
+    const int trace_bsize = 50 * sample_bsize;
     const float dummy[ 50 ] = {};
 
     WHEN( "writing parts of a trace" ) {
@@ -491,7 +494,7 @@ SCENARIO( MMAP_TAG "writing to a file", "[c.segy]" MMAP_TAG ) {
                 REQUIRE( ufp );
                 auto fp = ufp.get();
 
-                Err err = segy_writetrace( fp, 10, dummy, trace0, trace_bsize );
+                Err err = segy_writetrace( fp, 10, dummy, trace0, trace_bsize, sample_bsize );
                 REQUIRE( err == Err::ok() );
 
                 if( MMAP_TAG != std::string("") )
@@ -511,7 +514,7 @@ SCENARIO( MMAP_TAG "writing to a file", "[c.segy]" MMAP_TAG ) {
                                        start, stop, step,
                                        out.data(),
                                        nullptr,
-                                       trace0, trace_bsize );
+                                       trace0, trace_bsize, sample_bsize );
                 CHECK( err == Err::ok() );
                 THEN( "updates are observable" ) {
                     err = segy_readsubtr( fp,
@@ -519,7 +522,7 @@ SCENARIO( MMAP_TAG "writing to a file", "[c.segy]" MMAP_TAG ) {
                                           start, stop, step,
                                           buf.data(),
                                           nullptr,
-                                          trace0, trace_bsize );
+                                          trace0, trace_bsize, sample_bsize );
                     segy_to_native( format, buf.size(), buf.data() );
                     CHECK( err == Err::ok() );
                     CHECK_THAT( buf, ApproxRange( expect[ i ] ) );
@@ -621,7 +624,8 @@ SCENARIO( MMAP_TAG "extracting header fields", "[c.segy]" MMAP_TAG ) {
 SCENARIO( MMAP_TAG "modifying trace header", "[c.segy]" MMAP_TAG ) {
 
     const int samples = 10;
-    const int trace_bsize = segy_trace_bsize( samples );
+    const int sample_bsize = 4;
+    const int trace_bsize = segy_trace_bsize( samples, sample_bsize );
     const int trace0 = 0;
     const float emptytr[ samples ] = {};
     const char emptyhdr[ SEGY_TRACE_HEADER_SIZE ] = {};
@@ -663,7 +667,7 @@ SCENARIO( MMAP_TAG "modifying trace header", "[c.segy]" MMAP_TAG ) {
         /* make a file and write to last trace (to accurately get size) */
         err = segy_write_traceheader( fp, 10, emptyhdr, trace0, trace_bsize );
         REQUIRE( err == Err::ok() );
-        err = segy_writetrace( fp, 10, emptytr, trace0, trace_bsize );
+        err = segy_writetrace( fp, 10, emptytr, trace0, trace_bsize, sample_bsize );
         REQUIRE( err == Err::ok() );
         if( MMAP_TAG != std::string("") )
             REQUIRE( Err( segy_mmap( fp ) ) == Err::ok() );

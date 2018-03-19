@@ -490,7 +490,8 @@ int main( int argc, char** argv ) {
     if( err ) exit( errmsg( errno, "Unable to read binheader" ) );
 
     int samnr = segy_samples( binheader );
-    int trace_bsize = segy_trace_bsize( samnr );
+    int sample_bsize = segy_sample_nbytes( binheader );
+    int trace_bsize = segy_trace_bsize( samnr, sample_bsize );
     long trace0 = segy_trace0( binheader );
 
     int numtrh;

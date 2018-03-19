@@ -709,10 +709,10 @@ int segy_samples( const char* binheader ) {
     return samples;
 }
 
-int segy_trace_bsize( int samples ) {
+int segy_trace_bsize( int samples, int format ) {
     assert( samples >= 0 );
-    /* Hard four-byte float assumption */
-    return samples * 4;
+    const int sample_bsize = segy_sample_nbytes_format(format);
+    return samples * sample_bsize;
 }
 
 int segy_sample_nbytes_format( const int format ) {
@@ -876,7 +876,8 @@ int segy_sample_interval( segy_file* fp, float fallback, float* dt ) {
 
     const long trace0 = segy_trace0( bin_header );
     int samples = segy_samples( bin_header );
-    const int trace_bsize = segy_trace_bsize( samples );
+    int sample_bsize = segy_sample_nbytes( bin_header );
+    const int trace_bsize = segy_trace_bsize( samples, sample_bsize );
 
     err = segy_traceheader(fp, 0, trace_header, trace0, trace_bsize);
     if (err != 0) {
@@ -1551,23 +1552,42 @@ int segy_to_native( int format,
 
 int segy_from_native( int format,
                       long long size,
-                      float* buf ) {
+                      void* buf ) {
 
     assert( sizeof( float ) == sizeof( uint32_t ) );
 
-    uint32_t u;
+    const int sample_bsize = segy_sample_nbytes_format( format ) ;
 
     if( format == SEGY_IBM_FLOAT_4_BYTE ) {
         for( long long i = 0; i < size; ++i )
-            native_ibm( buf + i );
+            native_ibm( (char*)buf + sample_bsize*i );
     }
 
-    for( long long i = 0; i < size; ++i ) {
-        memcpy( &u, buf + i, sizeof( uint32_t ) );
-        u = htonl( u );
-        memcpy( buf + i, &u, sizeof( uint32_t ) );
+    switch( sample_bsize ) {
+        case 4:
+        {
+            uint32_t u;
+            for( long long i = 0; i < size; ++i ) {
+                memcpy( &u, (char*)buf + sample_bsize*i, sizeof( uint32_t ) );
+                u = htonl( u );
+                memcpy( (char*)buf + sample_bsize*i, &u, sizeof( uint32_t ) );
+            }
+            break ;
+        }
+        case 2:
+        {
+            uint16_t u;
+            for( long long i = 0; i < size; ++i ) {
+                memcpy( &u, (char*)buf + sample_bsize*i, sizeof( uint16_t ) );
+                u = htonl( u );
+                memcpy( (char*)buf + sample_bsize*i, &u, sizeof( uint16_t ) );
+            }
+            break ;
+        }
+            //        case 1:
+            // Do nothing... already on correct byte-order
     }
-
+    
     return SEGY_OK;
 }
 

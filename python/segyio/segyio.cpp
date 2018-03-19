@@ -170,6 +170,7 @@ struct segyiofd {
     int tracecount;
     int samplecount;
     int format;
+    int sample_bsize;
 };
 
 struct buffer_guard {
@@ -285,7 +286,8 @@ int init( segyiofd* self, PyObject* args, PyObject* ) {
     const long trace0 = segy_trace0( binary );
     const int samplecount = segy_samples( binary );
     const int format = segy_format( binary );
-    const int trace_bsize = segy_trace_bsize( samplecount );
+    const int trace_bsize = segy_trace_bsize( samplecount, format );
+    const int sample_bsize = segy_sample_nbytes_format( format );
 
     if( tracecount == 0 ) {
         const int err = segy_traces( fd, &tracecount, trace0, trace_bsize );
@@ -324,6 +326,7 @@ int init( segyiofd* self, PyObject* args, PyObject* ) {
     self->format = format;
     self->samplecount = samplecount;
     self->tracecount = tracecount;
+    self->sample_bsize = sample_bsize;
 
     return 0;
 }
@@ -793,6 +796,7 @@ PyObject* gettr( segyiofd* self, PyObject* args ) {
     const long long bufsize = (long long) length * samples;
     const long trace0 = self->trace0;
     const int trace_bsize = self->trace_bsize;
+    const int sample_bsize = self->sample_bsize;
 
     if( buffer.len() < bufsize )
         return ValueError( "internal: data trace buffer too small, "
@@ -801,12 +805,13 @@ PyObject* gettr( segyiofd* self, PyObject* args ) {
 
     int err = 0;
     int i = 0;
-    float* buf = buffer.buf< float >();
-    for( ; err == 0 && i < length; ++i, buf += samples ) {
+    void* buf = buffer.buf< void >();
+    for( ; err == 0 && i < length; ++i, buf = (char*)buf + sample_bsize*samples ) {
         err = segy_readtrace( fp, start + (i * step),
                                   buf,
                                   trace0,
-                                  trace_bsize );
+                                  trace_bsize,
+                                  sample_bsize );
     }
 
     if( err == SEGY_FREAD_ERROR )
@@ -814,7 +819,7 @@ PyObject* gettr( segyiofd* self, PyObject* args ) {
 
     if( err ) return Error( err );
 
-    segy_to_native( self->format, bufsize, buffer.buf< float >() );
+    segy_to_native( self->format, bufsize, buffer.buf< void >() );
 
     Py_INCREF( bufferobj );
     return bufferobj;
@@ -825,7 +830,7 @@ PyObject* puttr( segyiofd* self, PyObject* args ) {
     if( !fp ) return NULL;
 
     int traceno;
-    float* buffer;
+    void* buffer;
     Py_ssize_t buflen;
 
     if( !PyArg_ParseTuple( args, "is#", &traceno, &buffer, &buflen ) )
@@ -836,7 +841,8 @@ PyObject* puttr( segyiofd* self, PyObject* args ) {
     int err = segy_writetrace( fp, traceno,
                                    buffer,
                                    self->trace0,
-                                   self->trace_bsize );
+                                   self->trace_bsize,
+                                   self->sample_bsize );
 
     segy_to_native( self->format, self->samplecount, buffer );
 
@@ -876,14 +882,15 @@ PyObject* getline( segyiofd* self, PyObject* args) {
                                   line_length,
                                   stride,
                                   offsets,
-                                  buffer.buf< float >(),
+                                  buffer.buf< void >(),
                                   self->trace0,
-                                  self->trace_bsize);
+                                  self->trace_bsize,
+                                  self->sample_bsize );
     if( err ) return Error( err );
 
     segy_to_native( self->format,
                     self->samplecount * line_length,
-                    buffer.buf< float >() );
+                    buffer.buf< void >() );
 
     Py_INCREF( bufferobj );
     return bufferobj;
@@ -909,10 +916,11 @@ PyObject* getdepth( segyiofd* self, PyObject* args ) {
 
     int traceno = 0;
     int err = 0;
-    float* buf = buffer.buf< float >();
+    void* buf = buffer.buf< void >();
 
     const long trace0 = self->trace0;
     const int trace_bsize = self->trace_bsize;
+    const int sample_bsize = self->sample_bsize;
 
     for( ; err == 0 && traceno < count; ++traceno) {
         err = segy_readsubtr( fp,
@@ -920,9 +928,10 @@ PyObject* getdepth( segyiofd* self, PyObject* args ) {
                               depth,
                               depth + 1,
                               1,
-                              buf++,
+                              buf,
                               NULL,
-                              trace0, trace_bsize);
+                              trace0, trace_bsize, sample_bsize);
+        buf = (char*)buf + sample_bsize;
     }
 
     if( err == SEGY_FREAD_ERROR )
@@ -931,7 +940,7 @@ PyObject* getdepth( segyiofd* self, PyObject* args ) {
 
     if( err ) return Error( err );
 
-    segy_to_native( self->format, count, buffer.buf< float >() );
+    segy_to_native( self->format, count, buffer.buf< void >() );
 
     Py_INCREF( bufferobj );
     return bufferobj;
@@ -1091,8 +1100,9 @@ PyObject* textsize(PyObject* ) {
 
 PyObject* trbsize( PyObject*, PyObject* args ) {
     int sample_count;
-    if( !PyArg_ParseTuple( args, "i", &sample_count ) ) return NULL;
-    return PyLong_FromLong( segy_trace_bsize( sample_count ) );
+    int sample_bsize;
+    if( !PyArg_ParseTuple( args, "ii", &sample_count, &sample_bsize ) ) return NULL;
+    return PyLong_FromLong( segy_trace_bsize( sample_count, sample_bsize ) );
 }
 
 PyObject* getfield( PyObject*, PyObject *args ) {
@@ -1218,13 +1228,21 @@ PyObject* fread_trace0( PyObject* , PyObject* args ) {
 PyObject* format( PyObject* , PyObject* args ) {
     PyObject *out;
     int format;
+    int sample_bsize;
 
     if( !PyArg_ParseTuple( args, "Oi", &out, &format ) ) return NULL;
+    
+    sample_bsize = segy_sample_nbytes_format( format );
 
-    buffer_guard buffer( out, PyBUF_CONTIG );;
+    buffer_guard buffer( out, PyBUF_CONTIG );
+    
+    if (buffer.len() % sample_bsize != 0) {
+        return ValueError( "internal: binary buffer size incorrect, expected %zd do divide %d",
+                   buffer.len(), sample_bsize );
+    }
 
-    const int len = buffer.len() / sizeof( float );
-    segy_to_native( format, len, buffer.buf< float >() );
+    const int len = buffer.len() / sample_bsize;
+    segy_to_native( format, len, buffer.buf< void >() );
 
     Py_INCREF( out );
     return out;
