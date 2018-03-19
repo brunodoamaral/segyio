@@ -1416,8 +1416,8 @@ int segy_readsubtr( segy_file* fp,
         return SEGY_FREAD_ERROR;
     }
 
-    char* cur = (char*)tracebuf + defstart;
-    for( ; slicelen > 0; cur += step, --slicelen, buf = (char*)buf+sample_bsize )
+    char* cur = (char*)tracebuf + sample_bsize*defstart;
+    for( ; slicelen > 0; cur += sample_bsize*step, --slicelen, buf = (char*)buf+sample_bsize )
         memmove(buf, cur, sample_bsize) ;
 
     if( !rangebuf ) free( tracebuf );
@@ -1478,7 +1478,7 @@ int segy_writesubtr( segy_file* fp,
     if( fp->addr ) {
         /* if mmap is on, strided write is trivial and fast */
         char* cur = (char*)fp->cur + sample_bsize*defstart;
-        for( ; slicelen > 0; cur += step, buf = (const char*)buf+sample_bsize, --slicelen )
+        for( ; slicelen > 0; cur += sample_bsize*step, buf = (const char*)buf+sample_bsize, --slicelen )
             memmove(cur, buf, sample_bsize);
 
         return SEGY_OK;
@@ -1498,7 +1498,7 @@ int segy_writesubtr( segy_file* fp,
     }
 
     char* cur = (char*)tracebuf + sample_bsize * defstart;
-    for( ; slicelen > 0; cur += step, --slicelen, buf = (const char*)buf+sample_bsize)
+    for( ; slicelen > 0; cur += sample_bsize*step, --slicelen, buf = (const char*)buf+sample_bsize)
         memmove(cur, buf, sample_bsize);
 
     const size_t writec = fwrite( tracebuf, sample_bsize, elems, fp->fp );
