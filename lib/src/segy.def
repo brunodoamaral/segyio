@@ -16,6 +16,7 @@ segy_set_field
 segy_set_bfield
 segy_field_forall
 segy_trace_bsize
+segy_sample_nbytes_format
 segy_trace0
 segy_traces
 segy_sample_indices

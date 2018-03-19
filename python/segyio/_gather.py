@@ -11,13 +11,14 @@ class Gather:
     intersection of two lines in a cube.
     """
 
-    def __init__(self, trace, iline, xline, offsets, sort):
+    def __init__(self, trace, iline, xline, offsets, sort, native_fmt):
         # cache constructed modes for performance
-        self.trace     = trace
-        self.iline     = iline
-        self.xline     = xline
-        self.offsets   = offsets
-        self.sort      = sort
+        self.trace      = trace
+        self.iline      = iline
+        self.xline      = xline
+        self.offsets    = offsets
+        self.sort       = sort
+        self.native_fmt = native_fmt
 
     def _getindex(self, il, xl, offset, sorting):
         """ Get the trace index for an (il, xl, offset) tuple
@@ -50,7 +51,7 @@ class Gather:
         xs = list(filter(self.offsets.__contains__,
                     range(*offs.indices(self.offsets[-1]+1))))
 
-        empty = np.empty(0, dtype = np.single)
+        empty = np.empty(0, dtype = self.native_fmt)
         # gather[int,int,:]
         if not any(map(isslice, [il, xl])):
             if len(xs) == 0: return empty

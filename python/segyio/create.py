@@ -137,8 +137,10 @@ def create(filename, spec):
     else:
         tracecount    = len(spec.ilines) * len(spec.xlines) * len(spec.offsets)
 
+    _native_fmt = segyio.SegyFile._native_format_id[spec.format]
+
     ext_headers = spec.ext_headers if hasattr(spec, 'ext_headers') else 0
-    samples = numpy.asarray(spec.samples, dtype = numpy.single)
+    samples = numpy.asarray(spec.samples, dtype = _native_fmt)
 
     binary = bytearray(_segyio.binsize())
     _segyio.putfield(binary, 3213, tracecount)

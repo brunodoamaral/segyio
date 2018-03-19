@@ -36,6 +36,15 @@ class SegyFile(object):
 
     _unstructured_errmsg = "File opened in unstructured mode."
 
+    _native_format_id = {
+        1: 'float32',
+        2: 'int32',
+        3: 'int16',
+        5: 'float32',
+        8: 'int8'
+    }
+
+
     def __init__(self, filename, mode, iline=189, xline=193, binary=None):
         """
         Constructor, internal.
@@ -67,6 +76,12 @@ class SegyFile(object):
         self.xfd = _segyio.segyiofd(filename, mode, binary)
         metrics = self.xfd.metrics()
         self._fmt = metrics['format']
+
+        if self._fmt in self._native_format_id:
+            self._native_fmt = self._native_format_id[self._fmt]
+        else:
+            raise Exception("Unsupported file type: {}".format(self._fmt))
+
         self._tracecount = metrics['tracecount']
         self._ext_headers = metrics['ext_headers']
 
@@ -497,11 +512,11 @@ class SegyFile(object):
 
     def _shape_buffer(self, shape, buf):
         if buf is None:
-            return np.empty(shape=shape, dtype=np.single)
+            return np.empty(shape=shape, dtype=self._native_fmt)
         if not isinstance(buf, np.ndarray):
             return buf
-        if buf.dtype != np.single:
-            return np.empty(shape=shape, dtype=np.single)
+        if buf.dtype != self._native_fmt:
+            return np.empty(shape=shape, dtype=self._native_fmt)
         if buf.shape[0] == shape[0]:
             return buf
         if buf.shape != shape and buf.size == np.prod(shape):
@@ -971,7 +986,7 @@ class SegyFile(object):
         if self._gather is not None:
             return self._gather
 
-        self._gather = Gather(self.trace, self.iline, self.xline, self.offsets, self.sorting)
+        self._gather = Gather(self.trace, self.iline, self.xline, self.offsets, self.sorting, self._native_fmt)
         return self._gather
 
     @property
@@ -1098,6 +1113,10 @@ class SegyFile(object):
                 return d[self._fmt]
 
         return fmt()
+
+    @property
+    def native_format(self):
+        return self._native_fmt
 
 class spec:
     def __init__(self):

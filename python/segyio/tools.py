@@ -85,7 +85,9 @@ def native(data,
         >>> trace = segyio.tools.native(d[240:240+samples])
     """
 
-    data = data.view( dtype = np.single )
+    native_format = segyio.SegyFile._native_format_id[format]
+
+    data = data.view( dtype = native_format )
     if copy:
         data = np.copy( data )
 
@@ -269,6 +271,6 @@ def resample(f, rate = None, delay = None, micro = False,
     t0 = delay if delay is not None else f.samples[0]
     rate = rate / 1000 if rate is not None else f.samples[1] - f.samples[0]
 
-    f._samples = (np.arange(len(f.samples), dtype = np.single) * rate) + t0
+    f._samples = (np.arange(len(f.samples), dtype = f.samples.dtype) * rate) + t0
 
     return f
