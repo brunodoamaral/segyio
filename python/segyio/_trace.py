@@ -85,8 +85,8 @@ class Trace:
         :type buf: ?
         :type segy: segyio.SegyFile
         """
-        if isinstance(buf, np.ndarray) and buf.dtype != self._file._native_fmt:
-            raise TypeError("Numpy array must be of type {}".format(self._file._native_fmt))
+        if isinstance(buf, np.ndarray) and buf.dtype != segy._native_fmt:
+            raise TypeError("Numpy array must be of type {}".format(segy._native_fmt))
 
         segy.xfd.puttr(traceno, buf)
 
